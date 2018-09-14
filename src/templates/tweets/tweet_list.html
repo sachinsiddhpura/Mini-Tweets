@@ -1,0 +1,183 @@
+{% extends 'base.html'%}
+{% load static %}
+
+<style>
+	#tweet-container{
+
+	}
+</style>
+
+{% block script %}
+<script>
+
+	function getParameterByName(name,url){
+		if(!url){
+			url=window.location.href;
+		}
+		name=name.replace(/[\[\]]/g,"\\$&");
+		var regex=new RegExp("[?&]" + name + "(=([^&#]*)|&|#|$)"),
+		results=regex.exec(url);
+		if(!results) return null;
+		if(!results[2]) return "";
+		return decodeURIComponent(results[2].replace(/\+/g," "));
+	}
+
+	$(document).ready(function(){
+		console.log("working");
+
+		var query=getParameterByName("q")
+		var tweetList=[];
+		var nextTweetUrl;
+
+		function updateHashLink(){
+			$(".media-body").each(function(data){
+				var hashtagRegex=/(^|\s)#([\w\d-]+)/g
+				var newText=$(this).html().replace(hashtagRegex,"$1<a href='/tags/$2'>#$2</a>")
+				$(this).html(newText)
+			})
+		}
+		//console.log(query)
+		function attchtweet(tweetValue){
+				var tweetDisplay=tweetValue.date_display;
+				var tweetContent=tweetValue.content;
+				var tweetUser=tweetValue.user;
+				$("#tweet-container").append(
+				"<div class=\"media\"><div class=\"media-body\">"+ tweetContent + "</br> via <a href='"+ tweetUser.url + "'>" + tweetUser.username + " </a> | "+ tweetDisplay +" | " +"<a href=''>View</a>" +" | "+ "<a href='#' class='tweet-link'>Like</a>"+ "</div></div><hr/>"
+				)
+		}
+
+		function parseTweet(){
+			if(tweetList==0){
+			$("#tweet-container").text("No tweets currently, found")
+			}else{
+			$.each(tweetList,function(key,value){
+				var tweetkey=key;
+				attchtweet(value)
+
+			})
+		}
+	}	
+	function fetchTweet(url){
+		var fetchUrl;
+		if (!url){
+			fetchUrl="/api/tweetme/"
+		}else{
+			fetchUrl=url
+		}
+		console.log("fetching....")
+		$.ajax({
+			url:fetchUrl,
+			data:{
+				"q":query
+			},
+			method:"GET",
+			success:function(data){
+				console.log(data)
+				tweetList=data.results
+				if(data.next){
+				nextTweetUrl=data.next
+				}else{
+				$("#loadmore").css("display","none")
+				}
+
+				parseTweet()
+				updateHashLink()
+			},
+			error:function(data){
+			 	console.log("error")
+			 	console.log(data)
+			}
+		})
+	}
+	fetchTweet()
+
+	$("#loadmore").click(function(event){
+		event.preventDefault()
+		if(nextTweetUrl){
+			fetchTweet(nextTweetUrl)
+		}
+	})
+
+	$(document.body).on("click",".tweet-link",function(e){
+		e.preventDefault()
+		var this_=$(this)
+		this_.text("Liked")
+	})
+
+	var charsStart=140;
+	var charsCurrent=0;
+
+	$("#tweet-from").append("<span id='tweetleft'>"+ charsStart +"</span>")
+
+	$("#tweet-from textarea").keyup(function(event){
+		var tweetValue= $(this).val()
+		charsCurrent=charsStart - tweetValue.length
+		var spanChar=$("#tweetleft")
+		spanChar.text(charsCurrent)
+		if(charsCurrent>0){
+			spanChar.removeClass("grey-color")
+			spanChar.removeClass("red-color")
+		}else if(charsCurrent==0){
+			spanChar.addClass("grey-color")
+			spanChar.removeClass("red-color")
+		}else if(charsCurrent<0){
+			spanChar.addClass("red-color")
+			spanChar.removeClass("grey-color")
+		}
+	})
+
+	$("#tweet-form").submit(function(event){
+		event.preventDefault()
+		var this_=$(this)
+		var formData=this_.serialize()
+		if(charsCurrent>=0){
+			$.ajax({
+				url:"/api/tweetme/create/",
+				data:formData,
+				method:"POST",
+				success:function(data){
+					this.find("input[type=text],textarea").val("")
+					attchtweet(data,true)
+					//console.log(data)
+					//fetchTweet()
+				},
+
+				error:function(data){
+					console.log("error")
+					console.log(data.statusText)
+					console.log(data.status)
+				}
+
+
+			})
+		}else{
+			console.log("Cannot send tweet too long")
+		}
+	})
+
+
+});
+
+</script>
+{% endblock script %}
+
+
+{% block content %}
+<div class="row">
+	<div class="col-sm-3 col-xs-12">
+		<h1>{{ request.user }}</h1>
+	</div>
+	<div class="col-sm-9">
+		{% if not request.GET.q %}
+			<div class="">
+				{% include 'form.html' with form=form action_url=create_url btn_title='Tweet' form_id='tweet-from'%}
+			</div>
+			<hr/>
+		{% endif %}
+		<div id="tweet-container">
+			
+		</div>
+		<a href="#" id="loadmore">Load More Tweet</a>
+	</div>
+</div>
+{% endblock %}
